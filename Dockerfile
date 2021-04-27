@@ -17,7 +17,58 @@ RUN Write-Host 'Enabling TLS 1.2 (https://githubengineering.com/crypto-removal-n
 	New-ItemProperty -Path ('{0}/Server' -f $tls12RegBase) -Name 'Enabled' -PropertyType DWORD -Value 1 -Force; \
 	Write-Host 'Complete.'
 
+# Postgres client
+ENV EDB_VER 9.4.26-1
+ENV EDB_REPO https://get.enterprisedb.com/postgresql
+
+### Download EnterpriseDB and remove cruft
+RUN $URL1 = $('{0}/postgresql-{1}-windows-x64-binaries.zip' -f $env:EDB_REPO,$env:EDB_VER) ; \
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; \
+    Invoke-WebRequest -Uri $URL1 -OutFile 'C:\\EnterpriseDB.zip' ; \
+    Expand-Archive 'C:\\EnterpriseDB.zip' -DestinationPath 'C:\\' ; \
+    Remove-Item -Path 'C:\\EnterpriseDB.zip' ; \
+    Remove-Item -Recurse -Force -Path 'C:\\pgsql\\doc' ; \
+    Remove-Item -Recurse -Force -Path 'C:\\pgsql\\include' ; \
+    Remove-Item -Recurse -Force -Path 'C:\\pgsql\\pgAdmin*' ; \
+    Remove-Item -Recurse -Force -Path 'C:\\pgsql\\StackBuilder'
+
+### Install correct Visual C++ Redistributable Package
+RUN if (($env:EDB_VER -like '9.*') -or ($env:EDB_VER -like '10.*')) { \
+        Write-Host('Visual C++ 2013 Redistributable Package') ; \
+        $URL2 = 'https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe' ; \
+    } else { \
+        Write-Host('Visual C++ 2017 Redistributable Package') ; \
+        $URL2 = 'https://download.visualstudio.microsoft.com/download/pr/11100230/15ccb3f02745c7b206ad10373cbca89b/VC_redist.x64.exe' ; \
+    } ; \
+    Invoke-WebRequest -Uri $URL2 -OutFile 'C:\\vcredist.exe' ; \
+    Start-Process 'C:\\vcredist.exe' -Wait \
+        -ArgumentList @( \
+            '/install', \
+            '/passive', \
+            '/norestart' \
+        )
+
+# Determine new files installed by VC Redist
+# RUN Get-ChildItem -Path 'C:\\Windows\\System32' | Sort-Object -Property LastWriteTime | Select Name,LastWriteTime -First 25
+
+# Copy relevant DLLs to PostgreSQL
+RUN if (Test-Path 'C:\\windows\\system32\\msvcp120.dll') { \
+        Write-Host('Visual C++ 2013 Redistributable Package') ; \
+        Copy-Item 'C:\\windows\\system32\\msvcp120.dll' -Destination 'C:\\pgsql\\bin\\msvcp120.dll' ; \
+        Copy-Item 'C:\\windows\\system32\\msvcr120.dll' -Destination 'C:\\pgsql\\bin\\msvcr120.dll' ; \
+    } else { \
+        Write-Host('Visual C++ 2017 Redistributable Package') ; \
+        Copy-Item 'C:\\windows\\system32\\vcruntime140.dll' -Destination 'C:\\pgsql\\bin\\vcruntime140.dll' ; \
+    }
+
+ENV PG_HOME C:\\pgsql
+RUN $pgPath = ('{0}\bin;{1}' -f $env:PG_HOME, $env:PATH); \
+	Write-Host ('Updating PATH: {0}' -f $pgPath); \
+	setx /M PATH $pgPath; \
+	Write-Host 'Complete.'
+
 ENV JAVA_HOME C:\\openjdk-11
+
 RUN $newPath = ('{0}\bin;{1}' -f $env:JAVA_HOME, $env:PATH); \
 	Write-Host ('Updating PATH: {0}' -f $newPath); \
 	setx /M PATH $newPath; \
@@ -59,4 +110,4 @@ RUN Write-Host ('Downloading {0} ...' -f $env:JAVA_URL); \
 	Write-Host 'Complete.'
 
 # "jshell" is an interactive REPL for Java (see https://en.wikipedia.org/wiki/JShell)
-CMD ["echo DONE"]
+CMD ["jshell"]
