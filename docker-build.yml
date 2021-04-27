@@ -13,9 +13,16 @@ variables:
   imageName: 'synergy4-docker'
 
 steps:
+#- task: Docker@2
+#  displayName: Build an image
+#  inputs:
+#    repository: $(imageName)
+#    command: build
+#    Dockerfile: Dockerfile
+
 - task: Docker@2
-  displayName: Build an image
   inputs:
-    repository: $(imageName)
-    command: build
-    Dockerfile: Dockerfile
+    containerRegistry: 'DockerHub Connection'
+    repository: '$(imageName)'
+    command: 'buildAndPush'
+    Dockerfile: '**/Dockerfile'
