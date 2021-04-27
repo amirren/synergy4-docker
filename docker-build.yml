@@ -10,7 +10,7 @@ pool:
   vmImage: windows-latest
 
 variables:
-  imageName: 'synergy4-docker'
+  imageName: 'man2002ua/man2002ua'
 
 steps:
 #- task: Docker@2
